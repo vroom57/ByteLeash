@@ -1,0 +1,10 @@
+# Normalize line endings so files work on Windows, Linux, macOS and firewall builds
+* text=auto
+
+# Shell scripts must keep LF endings to run on Linux/macOS/firewall systems
+*.sh text eol=lf
+
+# Windows scripts keep CRLF endings
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
