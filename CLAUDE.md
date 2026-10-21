@@ -4,7 +4,9 @@ Windows app that throttles per-app upload traffic (burst → trickle → daily c
 Service + tray app design. See docs/ideas.md for the full idea and open questions.
 
 ## Status
-Design stage. No code yet.
+`core/` throttling engine (`AppBudget`, `Engine`) built and unit-tested.
+No Windows platform code yet. Build + test: `scripts\build.cmd [debug|release]`
+(or open the folder in Visual Studio; it uses CMakePresets.json).
 
 ## Tooling
 C++20, CMake, MSVC (Visual Studio Community), static CRT (`/MT`), doctest,

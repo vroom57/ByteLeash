@@ -174,19 +174,51 @@ Each entry shows its current status, so a blocked app is easy to spot:
 | Status    | Meaning                                              |
 |-----------|------------------------------------------------------|
 | Bursting  | Sending within its burst budget                      |
-| Throttled | Burst used; held to its throttled rate               |
+| Throttled | Burst used up; held to its throttled rate until the burst has fully refilled |
 | Capped    | Hit its daily cap; uploads blocked until midnight    |
 | Approved  | Has custom (higher or unlimited) limits              |
 
+## Learning mode and Leash mode
+
+ByteLeash has two modes.
+
+- **Learning mode** is where ByteLeash starts after install. Nothing is
+  limited, but all traffic is counted and shown, so you can see which apps
+  talk to the internet and how much they send. Learning has no time limit;
+  it lasts until you end it. While you're in learning mode, ByteLeash
+  reminds you when you log on.
+- **Leash mode** starts when you end learning. You choose the apps to
+  **unleash** (no limits); every other app is leashed with the default
+  limits. Windows' essential services stay unlimited either way (see
+  [Windows system services](#windows-system-services)).
+
+You can switch back to learning mode at any time, for example after
+installing new software, and end it again when you're ready.
+
+### What would have happened
+
+While learning, ByteLeash also works out what Leash mode would have done to
+each app with its limits, so you can decide which apps to unleash. Each app
+shows, counted since learning started:
+
+- **Would have been throttled N times:** how often the app would have used
+  up its burst and been slowed to its throttled rate. A single large upload
+  counts once, not once per packet.
+- **Would have hit its daily cap on N days.**
+
+Counts above 999 show as **999+**.
+
 ## New apps
 
-When an app ByteLeash hasn't seen before starts uploading, it's throttled
-straight away with the default limits. There's no popup:
+In learning mode, apps ByteLeash hasn't seen before simply appear in the
+list.
 
+In Leash mode, a new app is leashed straight away with the default limits:
+
+- A tray notification tells you a new app was leashed. Open its entry to
+  unleash it if you want.
 - The tray icon shows a small badge with the number of new apps.
 - New entries are highlighted in the list until you've viewed them.
-- If you prefer to be told immediately, toast notifications for new apps can
-  be turned on in settings (off by default).
 
 ## Windows system services
 

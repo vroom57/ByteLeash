@@ -6,7 +6,8 @@
 ## Current status (updated 2026-10-15)
 
 Design review complete (see Design Q&A below); all open items decided.
-No code yet.
+Core throttling engine written and unit-tested (2026-10-21); no Windows code
+yet.
 
 ### Open items
 
@@ -21,14 +22,20 @@ No code yet.
 
 ### Next steps
 
-1. Commit the design docs.
-2. Install Visual Studio Community with the "Desktop development with C++"
-   workload (includes CMake).
-3. CMake project skeleton, then the `core/` throttling engine (token bucket,
-   daily cap, payload-only accounting) with doctest unit tests. No WinDivert
-   needed yet.
+1. ~~Commit the design docs.~~ Done.
+2. ~~Install Visual Studio Community with the "Desktop development with C++"
+   workload (includes CMake).~~ Done 2026-10-21: VS Community 2026 (18.11),
+   MSVC 19.51, CMake 4.3.1; C++20 + `/MT` smoke test builds and runs.
+3. ~~CMake project skeleton, then the `core/` throttling engine (token
+   bucket, daily cap, payload-only accounting) with doctest unit tests.~~
+   Done 2026-10-21: `byteleash_core` library (`AppBudget`, `Engine`) and
+   `core_tests`; build with `scripts\build.cmd` or open the folder in VS.
+   Not yet in core: LAN-exemption address classification, settings file.
 4. WinDivert prototype: log upload packets with owning app and destination,
-   to validate the provisional app-identity rule against real traffic.
+   to validate the provisional app-identity rule against real traffic. Also
+   check packet sizes: with large send offload, Windows may hand WinDivert
+   segments up to 64 KB, and a packet bigger than an app's burst can never
+   pass.
 
 ## What is ByteLeash?
 
@@ -162,6 +169,12 @@ Two parts:
   the app's throttled rate. Idle time refills the burst (64 KB at 30 B/s ≈ 36
   min). The bucket is shared across all of the app's connections, so opening
   more connections doesn't earn more burst. The daily cap still bounds totals.
+- Core engine API: the platform layer passes in "now" as a monotonic
+  instant (for the token bucket) plus the local date (for the midnight
+  reset), so core has no clock or time-zone code and tests control time.
+  Apps are keyed by an opaque UTF-8 identity string. An app shows
+  **Throttled** from its first over-budget drop until its burst has fully
+  refilled. Raising an app's burst adds the difference to its bucket at once.
 - The throttle is the primary control; the daily cap is a safety net.
 - Hitting the daily cap blocks the app's upload payload until the daily reset
   (empty packets still pass). The first time each app hits its cap that day,
@@ -187,10 +200,32 @@ Two parts:
   settings are kept; only the list entry clears.) An app is dormant after
   no open connections and no traffic for 5 minutes (default; adjustable in
   settings). Apps holding a connection open never go dormant.
-- New, unknown apps are throttled silently with default limits. The tray icon
-  shows a "new apps" badge with a count, and new entries stay highlighted in
-  the list until viewed. Toast notifications for new apps are off by default
-  and can be turned on in settings.
+- Two modes (decided 2026-10-21). ByteLeash isn't a firewall, so it doesn't
+  start out deny-all:
+  - **Learning mode:** the default on first run. Nothing is limited; all
+    traffic is counted and shown, so you can see which apps talk and how
+    much. No time limit: learning lasts until you end it. While in learning
+    mode, a tray notice at each logon reminds you. You can switch back to
+    learning mode any time.
+  - **Leash mode:** chosen when you end learning. You pick the apps to
+    unleash (unlimited); every other app is leashed with the default limits.
+    The built-in system-service exemptions stay unlimited.
+  - No suggested apps on the review screen; that would mean maintaining a
+    list of apps.
+  - **Dry run during learning:** each app also runs a shadow budget with
+    the limits it would get in Leash mode, to show what would have
+    happened. Two counters, kept since learning started (not reset at
+    midnight): **would have been throttled N times** (one per transition
+    into Throttled, not per dropped packet: unthrottled traffic would
+    otherwise inflate the count, since real TCP backs off after a few
+    drops) and **would have hit its daily cap on N days**. The GUI shows
+    counts above 999 as "999+"; the counters themselves are exact.
+- New, unknown apps in Leash mode are leashed straight away with default
+  limits, and a tray notification tells you (on by default). You can open
+  the app's entry and unleash it. The tray icon also shows a "new apps"
+  badge with a count, and new entries stay highlighted in the list until
+  viewed. In learning mode new apps just appear in the list. (Revised
+  2026-10-21; previously new apps were throttled silently with toasts off.)
 - Distribution is one folder with four runtime files (docs/readmes not
   counted; goal is a tiny, unbloated directory):
   - `ByteLeash.exe`: one exe, two modes. Runs as the service when started by
@@ -333,6 +368,8 @@ Questions are answered one at a time; answers move into Decisions.
    publisher shown for info only.
 6. ~~What happens when a new, unknown app first uploads?~~ **Answered:**
    throttled silently; tray badge + highlighted entries; toasts optional.
+   **Revised 2026-10-21:** Learning mode first; in Leash mode new apps are
+   leashed with a tray notification on by default.
 7. ~~Default values; are burst and cap per-app configurable?~~ **Answered:**
    all three configurable per app; defaults 64 KB / 30 B/s / 3 MB/day.
 8. ~~One exe with service/tray modes?~~ **Answered:** yes; four runtime files,
