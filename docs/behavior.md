@@ -260,6 +260,11 @@ tray; unusual BITS uploads are worth a look.
 
 ## Known limitations
 
+- An app can get around its own limits by handing uploads to a Windows
+  service that's unlimited (for example BITS or Windows Update), or by
+  leaking small amounts of data through DNS lookups. ByteLeash isn't a
+  security product and doesn't try to stop this; the traffic is still
+  visible under the service that sent it.
 - Because headers and empty packets aren't charged, an app could in principle
   leak small amounts of data through header fields (IP ID, TCP options,
   timestamps) or through the timing and number of empty packets. ByteLeash

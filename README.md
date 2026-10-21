@@ -29,6 +29,16 @@ ByteLeash/
 Platform-independent code goes in `core/`. Each directory under `platforms/` contains
 only what is specific to that operating system or device, and builds on `core/`.
 
+## Contact and support
+
+- **Bugs and feature requests:** open an
+  [issue](https://github.com/vroom57/ByteLeash/issues). Please include your
+  Windows version and what you expected to happen.
+- **Security problems:** please don't open a public issue. Report them
+  privately as described in [SECURITY.md](SECURITY.md).
+
+ByteLeash is a personal project, so replies are best effort.
+
 ## License
 
 ByteLeash is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
