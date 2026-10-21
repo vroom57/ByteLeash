@@ -24,7 +24,7 @@ TEST_CASE("unknown apps don't exist until they communicate") {
 }
 
 TEST_CASE("each app has its own bucket") {
-    Engine engine;
+    Engine engine({}, Mode::Leash);
     for (int i = 0; i < 64; ++i) {
         engine.onOutbound(kApp, 1 * kKB, kHeader, at(0));
     }
@@ -70,7 +70,7 @@ TEST_CASE("changing defaults skips apps with custom limits") {
 }
 
 TEST_CASE("pause applies to every app") {
-    Engine engine;
+    Engine engine({}, Mode::Leash);
     engine.setPaused(true);
     CHECK(engine.onOutbound(kApp, 1024 * kKB, kHeader, at(0)) == Verdict::Pass);
     CHECK(engine.find(kApp)->today(at(0)).charged_bytes == 0);
@@ -94,4 +94,59 @@ TEST_CASE("totals sum today's counters across apps") {
 
     // Apps that haven't communicated since midnight contribute nothing.
     CHECK(engine.totals(at(2, byteleash::test::kDay2)) == Counters{});
+}
+
+namespace {
+
+// Drains kApp's 64 KB burst and sends one more packet.
+void overrunBurst(Engine& engine, Now now) {
+    for (int i = 0; i < 65; ++i) {
+        engine.onOutbound(kApp, 1 * kKB, kHeader, now);
+    }
+}
+
+}  // namespace
+
+TEST_CASE("learning mode is the default and limits nothing") {
+    Engine engine;
+    CHECK(engine.mode() == Mode::Learning);
+    for (int i = 0; i < 200; ++i) {
+        CHECK(engine.onOutbound(kApp, 1 * kKB, kHeader, at(0)) == Verdict::Pass);
+    }
+    CHECK(engine.find(kApp)->dryRun().throttle_events == 1);
+    CHECK(engine.find(kApp)->today(at(0)).dropped_packets == 0);
+}
+
+TEST_CASE("leash mode enforces, except for unleashed apps") {
+    Limits unlimited;
+    unlimited.unlimited = true;
+
+    Engine engine;
+    engine.setCustomLimits(kOther, unlimited, at(0));
+    engine.setMode(Mode::Leash);
+
+    overrunBurst(engine, at(0));
+    CHECK(engine.find(kApp)->today(at(0)).dropped_packets == 1);
+    for (int i = 0; i < 200; ++i) {
+        CHECK(engine.onOutbound(kOther, 1 * kKB, kHeader, at(0)) == Verdict::Pass);
+    }
+}
+
+TEST_CASE("re-entering learning mode resets dry-run counters") {
+    Engine engine;
+    overrunBurst(engine, at(0));
+    CHECK(engine.find(kApp)->dryRun().throttle_events == 1);
+
+    engine.setMode(Mode::Leash);
+    CHECK(engine.find(kApp)->dryRun().throttle_events == 1);  // Kept for review.
+    engine.setMode(Mode::Learning);
+    CHECK(engine.find(kApp)->dryRun() == DryRunCounters{});
+}
+
+TEST_CASE("pause overrides the learning-mode dry run") {
+    Engine engine;
+    engine.setPaused(true);
+    overrunBurst(engine, at(0));
+    CHECK(engine.find(kApp)->dryRun() == DryRunCounters{});
+    CHECK(engine.find(kApp)->today(at(0)).charged_bytes == 0);
 }

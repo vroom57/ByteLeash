@@ -14,7 +14,15 @@ enum class Verdict {
     DropCap,   // Daily cap reached.
 };
 
-// An app's current state, as shown in the tray.
+// How a packet's verdict is applied.
+enum class Enforcement {
+    On,      // Leash mode: over-budget packets are dropped.
+    DryRun,  // Learning mode: every packet passes; would-be drops are counted.
+    Paused,  // Protection paused: every packet passes and nothing is charged.
+};
+
+// An app's current state, as shown in the tray. In learning mode it shows the
+// simulated state, i.e. what Leash mode would be doing.
 enum class Status {
     Bursting,   // Sending within its burst budget.
     Throttled,  // Burst used up; held to its rate until the burst refills.
@@ -38,6 +46,15 @@ struct Counters {
     friend bool operator==(const Counters&, const Counters&) = default;
 };
 
+// What Leash mode would have done, counted during learning mode. Not reset at
+// midnight; reset when learning mode starts.
+struct DryRunCounters {
+    std::uint64_t throttle_events = 0;  // Transitions into Throttled.
+    std::uint64_t cap_days = 0;         // Days the daily cap would have been hit.
+
+    friend bool operator==(const DryRunCounters&, const DryRunCounters&) = default;
+};
+
 // Upload budget for one app: a token bucket (capacity = burst, refill = rate)
 // shared by all of the app's connections, plus a daily cap on charged payload.
 //
@@ -51,10 +68,17 @@ public:
     AppBudget(const Limits& limits, Now now);
 
     // Decides one outbound packet and updates the counters. payload_bytes == 0
-    // means an empty packet. While paused, packets pass and are counted but
-    // aren't charged and don't drain the bucket.
+    // means an empty packet.
+    //
+    // DryRun runs the budget exactly as On would (a would-be-dropped packet
+    // doesn't drain the bucket or count toward the cap), but lets every
+    // packet through and records would-be drops in dryRun() instead of the
+    // dropped counters. No cap notice is raised.
+    //
+    // Paused: packets pass and are counted but aren't charged and don't
+    // drain the bucket.
     Verdict onOutbound(std::uint64_t payload_bytes, std::uint64_t header_bytes,
-                       Now now, bool paused = false);
+                       Now now, Enforcement enforcement = Enforcement::On);
 
     // Counts inbound bytes. Downloads are never limited.
     void onInbound(std::uint64_t bytes, Now now);
@@ -76,8 +100,14 @@ public:
     // Current bucket level in bytes (may be fractional).
     double tokens(Now now) const;
 
+    const DryRunCounters& dryRun() const { return dry_run_; }
+    void resetDryRun() { dry_run_ = {}; }
+
 private:
     void advance(Now now);
+    // Charges the bucket and cap if the packet fits; otherwise records the
+    // would-be drop (cap notice when enforcing, dry-run counters otherwise).
+    Verdict take(std::uint64_t payload_bytes, Enforcement enforcement);
     double refilledTokens(Instant at) const;
     std::uint64_t effectiveCap() const;
 
@@ -92,6 +122,8 @@ private:
     bool cap_hit_ = false;
     bool cap_notice_pending_ = false;
     bool cap_notice_given_ = false;
+
+    DryRunCounters dry_run_;
 };
 
 }  // namespace byteleash

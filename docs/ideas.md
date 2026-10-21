@@ -19,6 +19,24 @@ yet.
    the exe, with each component clearly identified; About box shows the same.
 4. ~~Tray UI toolkit~~ **Decided:** plain Win32 + Direct2D, with a compact
    tray flyout and a full window. Pause/disable protection from the flyout.
+5. **LAN exemption details: discuss in a follow-up conversation.**
+   `core/` has a provisional classifier (`byteleash/address.h`) so work can
+   continue. Currently local: IPv4 loopback, 10/8, 172.16/12, 192.168/16,
+   link-local 169.254/16, multicast 224/4, broadcast; IPv6 loopback,
+   link-local fe80::/10, unique-local fc00::/7, multicast ff00::/8, and
+   IPv4-mapped addresses by their IPv4 rule. Questions:
+   - **Global IPv6 on the LAN:** devices on your own network often have
+     public IPv6 addresses (e.g. a NAS at 2001:…). These count as internet
+     today. Detecting "on-link" prefixes needs the Windows routing table
+     (platform code, not core). Worth doing?
+   - **CGNAT 100.64/10:** currently not local. It's usually the ISP side,
+     but Tailscale uses it for its VPN; treat it like any VPN?
+   - **Multicast:** all multicast is exempt (mDNS, SSDP, casting). Fine, or
+     only link-local scopes?
+   - **Should LAN traffic be shown** in the traffic view (counted but never
+     charged) or hidden entirely?
+   - **User-defined local ranges** (e.g. a second subnet or a routed home
+     lab): needed in v1?
 
 ### Next steps
 
@@ -30,12 +48,18 @@ yet.
    bucket, daily cap, payload-only accounting) with doctest unit tests.~~
    Done 2026-10-21: `byteleash_core` library (`AppBudget`, `Engine`) and
    `core_tests`; build with `scripts\build.cmd` or open the folder in VS.
-   Not yet in core: LAN-exemption address classification, settings file.
+   Since added: Learning/Leash modes with dry-run counters, and a
+   provisional LAN address classifier (see Open items 5). Not yet in core:
+   settings file, "known apps" list for new-app notifications.
 4. WinDivert prototype: log upload packets with owning app and destination,
    to validate the provisional app-identity rule against real traffic. Also
    check packet sizes: with large send offload, Windows may hand WinDivert
    segments up to 64 KB, and a packet bigger than an app's burst can never
-   pass.
+   pass. WinDivert isn't installed yet; plan: pin release 2.2.2 (latest,
+   2022), download the official zip at build time with a pinned hash (like
+   doctest) and copy `WinDivert.dll` / `WinDivert64.sys` next to the exe.
+   Also check: driver loads with Memory Integrity (HVCI) and Secure Boot on,
+   and whether antivirus products flag it.
 
 ## What is ByteLeash?
 

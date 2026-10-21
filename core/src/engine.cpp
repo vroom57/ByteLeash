@@ -2,12 +2,22 @@
 
 namespace byteleash {
 
-Engine::Engine(const Limits& defaults) : defaults_(defaults) {}
+Engine::Engine(const Limits& defaults, Mode mode)
+    : defaults_(defaults), mode_(mode) {}
 
 Verdict Engine::onOutbound(std::string_view app, std::uint64_t payload_bytes,
                            std::uint64_t header_bytes, Now now) {
     return budgetFor(app, now).onOutbound(payload_bytes, header_bytes, now,
-                                          paused_);
+                                          enforcement());
+}
+
+void Engine::setMode(Mode mode) {
+    if (mode == Mode::Learning && mode_ != Mode::Learning) {
+        for (auto& [name, budget] : apps_) {
+            budget.resetDryRun();
+        }
+    }
+    mode_ = mode;
 }
 
 void Engine::onInbound(std::string_view app, std::uint64_t bytes, Now now) {
@@ -77,6 +87,13 @@ AppBudget& Engine::budgetFor(std::string_view app, Now now) {
 const Limits& Engine::limitsFor(std::string_view app) const {
     auto it = custom_.find(app);
     return it == custom_.end() ? defaults_ : it->second;
+}
+
+Enforcement Engine::enforcement() const {
+    if (paused_) {
+        return Enforcement::Paused;
+    }
+    return mode_ == Mode::Learning ? Enforcement::DryRun : Enforcement::On;
 }
 
 }  // namespace byteleash

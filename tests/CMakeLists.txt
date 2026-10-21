@@ -10,6 +10,7 @@ FetchContent_Declare(doctest
 FetchContent_MakeAvailable(doctest)
 
 add_executable(core_tests
+    core/address_test.cpp
     core/app_budget_test.cpp
     core/engine_test.cpp
 )

@@ -25,7 +25,7 @@ AppBudget::AppBudget(const Limits& limits, Now now)
 
 Verdict AppBudget::onOutbound(std::uint64_t payload_bytes,
                               std::uint64_t header_bytes, Now now,
-                              bool paused) {
+                              Enforcement enforcement) {
     advance(now);
 
     if (payload_bytes == 0) {
@@ -34,34 +34,55 @@ Verdict AppBudget::onOutbound(std::uint64_t payload_bytes,
         return Verdict::Pass;
     }
 
-    const bool limited = !limits_.unlimited && !paused;
-    if (limited) {
-        // Cap first: once capped, the app is blocked regardless of the bucket.
-        if (counters_.charged_bytes + payload_bytes > effectiveCap()) {
-            if (!cap_notice_given_) {
-                cap_notice_pending_ = true;
+    bool charge = enforcement != Enforcement::Paused;
+    if (charge && !limits_.unlimited) {
+        if (const Verdict verdict = take(payload_bytes, enforcement);
+            verdict != Verdict::Pass) {
+            if (enforcement == Enforcement::On) {
+                ++counters_.dropped_packets;
+                counters_.dropped_payload_bytes += payload_bytes;
+                return verdict;
             }
-            cap_hit_ = true;
-            ++counters_.dropped_packets;
-            counters_.dropped_payload_bytes += payload_bytes;
-            return Verdict::DropCap;
+            // Dry run: let it through, but uncharged, as Leash mode would
+            // have dropped it.
+            charge = false;
         }
-        const auto cost = static_cast<double>(payload_bytes);
-        if (tokens_ < cost) {
-            throttled_ = true;
-            ++counters_.dropped_packets;
-            counters_.dropped_payload_bytes += payload_bytes;
-            return Verdict::DropRate;
-        }
-        tokens_ -= cost;
     }
 
     ++counters_.data_packets;
     counters_.payload_bytes += payload_bytes;
     counters_.data_header_bytes += header_bytes;
-    if (!paused) {
+    if (charge) {
         counters_.charged_bytes += payload_bytes;
     }
+    return Verdict::Pass;
+}
+
+Verdict AppBudget::take(std::uint64_t payload_bytes, Enforcement enforcement) {
+    const bool enforcing = enforcement == Enforcement::On;
+
+    // Cap first: once capped, the app is blocked until midnight regardless of
+    // the bucket, even for packets small enough to fit under the cap.
+    if (cap_hit_ || counters_.charged_bytes + payload_bytes > effectiveCap()) {
+        if (enforcing && !cap_notice_given_) {
+            cap_notice_pending_ = true;
+        }
+        if (!enforcing && !cap_hit_) {
+            ++dry_run_.cap_days;
+        }
+        cap_hit_ = true;
+        return Verdict::DropCap;
+    }
+
+    const auto cost = static_cast<double>(payload_bytes);
+    if (tokens_ < cost) {
+        if (!enforcing && !throttled_) {
+            ++dry_run_.throttle_events;
+        }
+        throttled_ = true;
+        return Verdict::DropRate;
+    }
+    tokens_ -= cost;
     return Verdict::Pass;
 }
 

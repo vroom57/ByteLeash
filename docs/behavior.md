@@ -247,7 +247,9 @@ tray; unusual BITS uploads are worth a look.
 ## Protocols and VPNs
 
 - **IPv4 and IPv6** are treated the same. Local network traffic is exempt on
-  both (including IPv6 link-local and unique-local addresses).
+  both: private addresses (10.x, 172.16–31.x, 192.168.x), link-local,
+  loopback, multicast and broadcast, plus IPv6 link-local and unique-local
+  addresses. (Provisional; may change.)
 - **TCP and UDP** are both throttled. This includes QUIC (HTTP/3), used by
   modern browsers and many apps. In this version, QUIC connections show the
   destination IP address rather than a hostname.

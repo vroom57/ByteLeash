@@ -157,6 +157,14 @@ TEST_CASE("cap resets at local midnight, the bucket doesn't") {
     CHECK(budget.takeCapNotice());  // New day, new notice.
 }
 
+TEST_CASE("once capped, even packets that would fit are blocked") {
+    AppBudget budget(capOnly(64 * kKB), at(0));
+    budget.onOutbound(63 * kKB, kHeader, at(0));
+    CHECK(budget.onOutbound(2 * kKB, kHeader, at(1)) == Verdict::DropCap);
+    CHECK(budget.onOutbound(500, kHeader, at(2)) == Verdict::DropCap);
+    CHECK(budget.status(at(2)) == Status::Capped);
+}
+
 TEST_CASE("cap reached exactly then exceeded on a new day") {
     AppBudget budget(capOnly(64 * kKB), at(0));
     CHECK(budget.onOutbound(64 * kKB, kHeader, at(0)) == Verdict::Pass);
@@ -186,7 +194,8 @@ TEST_CASE("give it more today lifts the cap until midnight") {
 
 TEST_CASE("paused: counted, not charged, bucket untouched") {
     AppBudget budget({}, at(0));
-    CHECK(budget.onOutbound(1 * kMB, kHeader, at(0), true) == Verdict::Pass);
+    CHECK(budget.onOutbound(1 * kMB, kHeader, at(0), Enforcement::Paused) ==
+          Verdict::Pass);
 
     const Counters c = budget.today(at(0));
     CHECK(c.payload_bytes == 1 * kMB);
@@ -245,4 +254,79 @@ TEST_CASE("inbound bytes are counted, and daily counters go stale at midnight") 
     budget.onInbound(5 * kMB, at(0));
     CHECK(budget.today(at(0)).received_bytes == 5 * kMB);
     CHECK(budget.today(at(0, kDay2)).received_bytes == 0);
+}
+
+namespace {
+
+// Sends `count` packets of `payload` bytes at `now` as a dry run; returns how
+// many were charged (i.e. would have passed in Leash mode).
+std::uint64_t dryRunMany(AppBudget& budget, int count, std::uint64_t payload,
+                         Now now) {
+    const std::uint64_t before = budget.today(now).charged_bytes;
+    for (int i = 0; i < count; ++i) {
+        CHECK(budget.onOutbound(payload, kHeader, now, Enforcement::DryRun) ==
+              Verdict::Pass);
+    }
+    return (budget.today(now).charged_bytes - before) / payload;
+}
+
+}  // namespace
+
+TEST_CASE("dry run passes everything but charges only what Leash mode would") {
+    AppBudget budget({}, at(0));
+    CHECK(dryRunMany(budget, 100, 1 * kKB, at(0)) == 64);
+
+    const Counters c = budget.today(at(0));
+    CHECK(c.data_packets == 100);
+    CHECK(c.payload_bytes == 100 * kKB);
+    CHECK(c.charged_bytes == 64 * kKB);
+    CHECK(c.dropped_packets == 0);
+    CHECK(budget.tokens(at(0)) == 0.0);
+    CHECK(budget.status(at(0)) == Status::Throttled);
+}
+
+TEST_CASE("dry run counts one throttle event per episode, not per packet") {
+    AppBudget budget({}, at(0));
+    dryRunMany(budget, 100, 1 * kKB, at(0));
+    CHECK(budget.dryRun().throttle_events == 1);
+
+    // Still throttled (bucket not yet full again): same episode.
+    dryRunMany(budget, 50, 1 * kKB, at(1000));
+    CHECK(budget.dryRun().throttle_events == 1);
+
+    // Bucket fully refilled, then drained again: a second episode.
+    dryRunMany(budget, 100, 1 * kKB, at(10000));
+    CHECK(budget.dryRun().throttle_events == 2);
+}
+
+TEST_CASE("dry run counts cap days across midnight and raises no notice") {
+    AppBudget budget(capOnly(64 * kKB), at(0));
+    dryRunMany(budget, 3, 32 * kKB, at(0));
+    dryRunMany(budget, 3, 32 * kKB, at(1));
+    CHECK(budget.dryRun().cap_days == 1);
+    CHECK_FALSE(budget.takeCapNotice());
+
+    dryRunMany(budget, 3, 32 * kKB, at(2, kDay2));
+    CHECK(budget.dryRun() == DryRunCounters{0, 2});
+}
+
+TEST_CASE("dry run ignores unlimited apps") {
+    Limits limits;
+    limits.unlimited = true;
+    AppBudget budget(limits, at(0));
+    dryRunMany(budget, 10, 1 * kMB, at(0));
+    CHECK(budget.dryRun() == DryRunCounters{});
+}
+
+TEST_CASE("dry-run counters reset on request") {
+    AppBudget budget({}, at(0));
+    dryRunMany(budget, 100, 1 * kKB, at(0));
+    budget.resetDryRun();
+    CHECK(budget.dryRun() == DryRunCounters{});
+}
+
+TEST_CASE("enforced drops don't touch dry-run counters") {
+    AppBudget budget({}, at(0));
+    sendMany(budget, 100, 1 * kKB, at(0));
+    CHECK(budget.dryRun() == DryRunCounters{});
 }
