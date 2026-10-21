@@ -3,11 +3,13 @@
 > Working document. Rough notes are fine here; once ideas firm up they can move
 > into a proper project description or design docs.
 
-## Current status (updated 2026-10-15)
+## Current status (updated 2026-10-21)
 
-Design review complete (see Design Q&A below); all open items decided.
-Core throttling engine written and unit-tested (2026-10-21); no Windows code
-yet.
+Design review complete (see Design Q&A below). Core throttling engine
+written and unit-tested. Windows: a watch-only ETW probe works without a
+driver (Next steps 5). Next: driverless enforcement test (Next steps 6).
+Open for discussion: LAN exemption details (item 5) and WinDivert as the
+shipping dependency (item 6).
 
 ### Open items
 
@@ -37,6 +39,17 @@ yet.
      charged) or hidden entirely?
    - **User-defined local ranges** (e.g. a second subnet or a routed home
      lab): needed in v1?
+6. **WinDivert as the shipping dependency: discuss.** From the maintainer
+   (basil00/WinDivert issue #395, 2025-09): 2.2.2 is the long-term version;
+   he's "not very active"; even security fixes "would be difficult, due to
+   the driver signing process", which depends on finding third parties to
+   sign. Risks for ByteLeash: no security fixes, **no ARM64** (Windows on
+   ARM laptops can't run it), antivirus false positives (Defender on the
+   zip; BitDefender reported quarantining `WinDivert64.sys`). Fine for the
+   prototype. Alternatives to weigh: driverless monitoring (Windows' own
+   per-app traffic stats) for learning mode, Windows QoS policies for
+   enforcement, or ByteLeash's own WFP driver (needs EV cert + Microsoft
+   attestation).
 
 ### Next steps
 
@@ -60,6 +73,57 @@ yet.
    doctest) and copy `WinDivert.dll` / `WinDivert64.sys` next to the exe.
    Also check: driver loads with Memory Integrity (HVCI) and Secure Boot on,
    and whether antivirus products flag it.
+   **Confirmed 2026-10-21:** Microsoft Defender quarantined the official
+   `WinDivert-2.2.2-A.zip` on download (`Misleading:Win32/Malgent!AMTB`,
+   severity high). Scanned individually, every file in the zip is clean,
+   including the shipped two (`WinDivert.dll`, `WinDivert64.sys`), so the
+   zip as a whole (likely the sample programs) triggered it.
+   `WinDivert64.sys` is Microsoft attestation-signed (2022-09-20), so
+   Windows will load it; its EV co-signature is from a third-party company
+   (成都密思听科技有限公司), not the WinDivert author. See Open items 6.
+5. ~~ETW probe (driverless alternative to step 4).~~ Done 2026-10-21:
+   `platforms/windows/probe/` (`byteleash-probe.exe`, watch-only, needs
+   admin). First 2-minute run on the dev PC:
+   - **Reliable:** 38,891 Kernel-Network events, 0 lost; all send/receive
+     events (IDs 10/11 TCPv4, 26/27 TCPv6, 42/43 UDPv4, 58/59 UDPv6)
+     decoded via TDH; ports correct (443/80 on top).
+   - **Identity rules hold up:** svchost split by service (wuauserv, DoSvc,
+     DiagTrack, BITS, Dnscache, LicenseManager, …); version wildcards work
+     for `EdgeWebView\Application\*\`, Store apps
+     (`Microsoft.WindowsStore_*_x64__…`) and Defender (`Platform\*-0\`).
+   - **Hostnames via DNS-Client events: partial.** Edge and Windows
+     components mostly named; Chrome destinations mostly not (it uses its
+     own resolver / DNS over HTTPS). Likely need SNI or reverse lookups for
+     those, or accept IPs.
+   - **Short-lived processes:** 2 PIDs had exited before lookup. Fix:
+     subscribe to Microsoft-Windows-Kernel-Process start events to record
+     image paths as processes start.
+   - **Exe file names that change:** e.g. an updater leaving
+     `claude.exe.old.<number>` running; the version wildcard only touches
+     folders, so each such rename is a new app. Decide whether to extend
+     the rule.
+   - **Send sizes:** ETW reports send operations, not packets: up to 27 KB
+     (wuauserv) and 16 KB (browsers), none over 64 KB in this run. A single
+     send larger than an app's burst can never pass in the current engine;
+     with ETW-based enforcement that needs a rule (e.g. allow the bucket to
+     go negative).
+   - **No empty-packet (ACK) data**, as expected: those counters would be
+     lost with ETW.
+   - **Dry run:** both browsers, the Store and Windows Update would each
+     have been throttled once in 2 minutes at default limits (the probe
+     applied defaults to every app, ignoring the built-in exemption list).
+     DiagTrack sent 19 KB, DoSvc 53 KB while downloading 94.5 MB.
+   - **Overhead:** event 18 ("protocol copied data") was the most frequent
+     (~80k in 2 min) and is unused; filter by event ID in the real service.
+6. **Driverless enforcement test (next).** Small test program, admin:
+   - Does a user-mode WFP block filter for one app cut its *existing*
+     connections, or only new ones? (ALE layers decide at connect time;
+     transport-layer filters by 5-tuple may be needed.)
+   - Lowest rate a Windows QoS throttle policy
+     (`New-NetQosPolicy -AppPathNameMatchCondition
+     -ThrottleRateActionBitsPerSecond`) accepts and actually enforces.
+   - Outcome decides Open items 6: driverless Leash mode, or WinDivert for
+     enforcement only.
 
 ## What is ByteLeash?
 

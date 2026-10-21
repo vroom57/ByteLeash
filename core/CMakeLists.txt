@@ -1,5 +1,6 @@
 add_library(byteleash_core STATIC
     src/address.cpp
+    src/app_identity.cpp
     src/app_budget.cpp
     src/engine.cpp
 )

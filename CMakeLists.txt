@@ -25,6 +25,10 @@ endif()
 
 add_subdirectory(core)
 
+if(WIN32)
+    add_subdirectory(platforms/windows)
+endif()
+
 if(BYTELEASH_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
