@@ -5,17 +5,21 @@
 
 ## Current status (updated 2026-10-26)
 
-v1 milestones and their order are in [plan.md](plan.md). v1 is for the
-author's own Windows 11 home PCs.
+**Current direction (decided 2026-10-26): a SRUM viewer.** The Leash work
+grew larger than expected and is **paused**. The intermediate step is a
+standalone app that shows the per-app upload / download totals Windows
+already records in SRUM (see "SRUM viewer" below). After it, decide where
+to pivot; seeing the data may suggest alerting features. Order of work:
+[plan.md](plan.md).
 
-Design review complete (see Design Q&A below). Core throttling engine
-written and unit-tested. Windows: a watch-only ETW probe works without a
-driver (Next steps 5). Driverless enforcement test (Next steps 6) in
-progress: the WFP part ran on loopback and works (an app-ID block cuts
-running connections instantly and disappears if the process dies); QoS
-still needs a second PC. WinDivert is not used for now (item 6, decided
-2026-10-26). Open for discussion: LAN exemption details (item 5) and
-enforcement with a WFP gate, which also blocks downloads (item 7).
+Paused Leash work, kept for future development: design review complete
+(see Design Q&A below); core throttling engine written and unit-tested;
+watch-only ETW probe works without a driver (Next steps 5); driverless
+enforcement test (Next steps 6) half done: the WFP part ran on loopback and
+works, QoS and job throttling still need a second PC. WinDivert is not used
+for now (item 6). Open items 5 (LAN exemption) and 7 (WFP gate / overshoot
+/ driverless throttling) belong to the Leash work and wait with it. Items
+below are numbered as before.
 
 ### Open items
 
@@ -206,6 +210,54 @@ enforcement with a WFP gate, which also blocks downloads (item 7).
        adapter and with Memory Integrity on; ETW reaction time (how much an
        app sends before the block lands).
      - Consequence: see Open items 7.
+
+## SRUM viewer (current direction, 2026-10-26)
+
+A standalone Windows app (no tray icon, no service) that lists every app
+with its **cumulative upload and download**, read from SRUM, the System
+Resource Usage Monitor that Windows runs all the time. Steps in plan.md
+(V1–V3).
+
+### What exists already
+
+- **Settings → Network & internet → Advanced network settings → Data
+  usage:** per-app totals for 30 days per adapter, but one combined number
+  (no up / down split).
+- **Task Manager → App history:** combined network column, Store apps by
+  default; not a report. **Resource Monitor → Network:** live per-process
+  send / receive rates, no totals.
+- Conclusion: the data exists in Windows, but Windows doesn't show it split
+  into up and down. ByteLeash builds a viewer that does (GPLv3).
+
+### Technical notes (to verify in V1)
+
+- Database: `C:\Windows\System32\sru\SRUDB.dat`, an ESE ("JET Blue")
+  database, held open by Windows (Diagnostic Policy Service). Read a copy
+  made through a volume shadow copy (`esentutl /y <file> /vss /d <copy>`
+  is built into Windows); needs admin. The copy may need ESE recovery
+  before it opens cleanly (srum-dump has notes on this).
+- Read it with Windows' own ESE API (`esent.dll`), so no third-party
+  dependency and nothing to add to LICENSE.txt.
+- Network data usage table (per srum-dump and public write-ups, verify):
+  `{973F5D5C-1D90-4944-BE8E-24B94231A174}`, columns include `TimeStamp`,
+  `AppId`, `UserId`, `InterfaceLuid`, `L2ProfileId`, `BytesSent`,
+  `BytesRecvd`. `AppId` / `UserId` are indexes into `SruDbIdMapTable`
+  (app path or name, user SID).
+- Granularity is about **one row per app per hour**; Windows writes to the
+  database on its own schedule (roughly hourly), so the last hour or so
+  isn't there yet. Retention is roughly 30–60 days.
+- `InterfaceLuid` / `L2ProfileId` tell which adapter and which Wi-Fi
+  network, which could split home vs. other networks.
+
+### Open questions
+
+- How does SRUM name svchost services, Store apps and system traffic?
+  Can ByteLeash's app-identity rules (core/) group them the same way?
+- Does SRUM count LAN traffic separately or at all? (Matters for Open
+  item 5 later.)
+- Is the hourly lag acceptable, or should a live ETW layer (from the
+  probe) fill in the last hour later?
+- Alerting ideas: collect them in V3, after using the viewer.
 
 ## What is ByteLeash?
 

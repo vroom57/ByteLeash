@@ -1,11 +1,71 @@
-# ByteLeash v1 Plan
+# ByteLeash Plan
 
-The ordered work to get to v1. Design decisions live in [ideas.md](ideas.md),
-user-facing behavior in [behavior.md](behavior.md); this file is only the
-order of work and when each step counts as done. Update it as milestones
-finish or change.
+The order of work and when each step counts as done. Design decisions live
+in [ideas.md](ideas.md), user-facing behavior in [behavior.md](behavior.md).
+Update this file as steps finish or the direction changes.
 
-## What v1 is (decided 2026-10-26)
+## Current direction (decided 2026-10-26): SRUM viewer
+
+The Leash work (burst / trickle / cap enforcement) grew larger than
+expected, so it's **paused** and kept below under Future development. The
+project now takes an intermediate step: a **standalone viewer** for the
+per-app network usage Windows already records in SRUM (System Resource
+Usage Monitor): bytes sent and received per app, per hour, for about the
+last 30–60 days. No tray icon, no service, nothing blocked.
+
+Why: Windows records this data but shows no per-app upload / download
+report (Settings → Data usage gives one combined number; Task Manager and
+Resource Monitor show live rates only). Seeing the data visually should show which
+apps send what, and give ideas for **alerting**, which may be more useful
+than enforcement. **After the viewer, decide where to pivot** (alerting,
+back to Leash, or something else).
+
+Technical notes and open questions: ideas.md, "SRUM viewer".
+
+### V1: Read SRUM (feasibility)
+
+- Copy the live database (`C:\Windows\System32\sru\SRUDB.dat`, kept open
+  by Windows) via a volume shadow copy, e.g. `esentutl /y ... /vss`, as
+  admin.
+- Open the copy with Windows' own ESE database engine (`esent.dll`, part of
+  Windows, so no new dependency) and read the network usage table plus the
+  ID map (app paths, user SIDs).
+- Console tool that prints / exports per-app bytes sent and received per
+  hour (CSV), in `platforms/windows/`.
+
+**Done when:** the tool's per-app totals on this PC agree with Settings →
+Data usage (combined) and with NetworkUsageView (sent / received).
+
+### V2: Viewer window
+
+- Standalone Win32 window (no tray), runs as admin (one UAC prompt per
+  start).
+- App list with **upload and download totals** for a chosen period (last
+  24 hours, 7 days, 30 days, all), sortable; apps grouped as in ideas.md
+  (svchost services shown by service name if SRUM records them that way).
+- Per-app hourly chart (Direct2D) of sent / received; filter by network
+  adapter / Wi-Fi network if useful.
+- Refresh (re-copy SRUM) and CSV export.
+
+**Done when:** you use it on your own PCs to look at what your apps send.
+
+### V3: Review and pivot
+
+- Write down what the data showed: surprising uploaders, patterns over
+  time, apps that upload more than they download.
+- Collect alerting ideas (e.g. "app X uploaded more than N MB today", "new
+  app started uploading") in ideas.md.
+- **Decide the next direction** and update this plan.
+
+**Done when:** the next direction is chosen and recorded here.
+
+## Future development: Leash mode (paused 2026-10-26)
+
+The original v1 plan, kept as it was when paused. M0 is done; M1 was in
+progress (see its status). Resume from M1 if the project pivots back to
+enforcement.
+
+### What v1 was going to be (decided 2026-10-26)
 
 - **For:** the author's own home PCs, Windows 11 only. No public release,
   code signing, antivirus reputation work or onboarding polish in v1.
@@ -17,8 +77,6 @@ finish or change.
 - **Must fail safe:** if the service stops, crashes or is removed, the PC
   keeps its internet and no filters or policies are left behind.
 
-## Milestones
-
 ### M0: Foundations (done 2026-10-21)
 
 - Design review, behavior doc.
@@ -28,7 +86,11 @@ finish or change.
 - `platforms/windows/probe/`: watch-only ETW probe, first run analysed
   (ideas.md, Next steps 5).
 
-### M1: Driverless enforcement test (in progress)
+### M1: Driverless enforcement test (paused 2026-10-26)
+
+**Where it stopped:** the WFP part is done (on loopback); everything listed
+under "Remaining" below is still open. The test program and results stay
+in the repo.
 
 **2026-10-26:** test program built, `byteleash-enforce-test.exe`
 (`platforms/windows/enforce_test/`, how to run in platforms/windows/README.md).
@@ -136,7 +198,7 @@ having to rescue it.
 **Done when:** every home PC runs Leash mode and a few weeks pass with the
 v1 success criteria holding.
 
-## After v1
+### After v1
 
 Not planned in detail; candidates from ideas.md:
 

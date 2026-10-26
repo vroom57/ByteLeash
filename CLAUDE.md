@@ -5,6 +5,12 @@ Service + tray app design, with a Learning mode (watch only, the default on
 first run) and a Leash mode (limits enforced). See docs/ideas.md for the full
 design, decisions, open items and next steps.
 
+**Current direction (2026-10-26):** the Leash work is paused. The active
+step is a standalone **SRUM viewer**: lists every app's cumulative upload
+and download from the data Windows records in SRUM. Then decide where to
+pivot (possibly alerting). Steps V1–V3 in docs/plan.md; notes in
+docs/ideas.md, "SRUM viewer".
+
 ## Status (2026-10-26)
 - `core/`: throttling engine (`AppBudget`, `Engine`) with Learning/Leash modes
   and dry-run counters, LAN address classifier (provisional), app-identity
@@ -17,11 +23,18 @@ design, decisions, open items and next steps.
   second PC). WFP part run on loopback 2026-10-26 (results in
   docs/ideas.md, Next steps 6); QoS and job still need a second PC. Run
   steps in platforms/windows/README.md.
-- No service, tray app or settings file yet.
+- No SRUM viewer code yet (plan V1 is next).
+- Paused with the Leash work: no service, tray app or settings file yet.
 
 ## Where to pick up
-v1 is for the author's own Windows 11 home PCs; milestones in docs/plan.md.
-1. **Next (plan M1, in progress):** driverless enforcement test. WFP
+For the author's own Windows 11 home PCs; order of work in docs/plan.md.
+**Next: plan V1**, read SRUM (copy the locked SRUDB.dat via shadow copy,
+open with esent.dll, dump per-app bytes sent / received per hour), then V2
+(viewer window), V3 (review and pivot).
+
+Paused (future development, Leash mode); resume from here if the project
+pivots back:
+1. **Plan M1 (paused):** driverless enforcement test. WFP
    answered on loopback: an app-ID block cuts existing connections at once
    (raw output in docs/test-results/2026-10-26-wfp-loopback/). Still open:
    how low a QoS or job object throttle goes (needs a second PC as sink;
@@ -44,7 +57,8 @@ v1 is for the author's own Windows 11 home PCs; milestones in docs/plan.md.
 - `scripts/build.cmd [debug|release]`: finds VS, configures, builds, tests.
   Or open the folder in Visual Studio (uses CMakePresets.json). Output in
   `build/<preset>/`.
-- `docs/plan.md` (v1 milestones M0–M6, in order), `docs/ideas.md` (design
+- `docs/plan.md` (current steps V1–V3; paused Leash milestones M0–M6),
+  `docs/ideas.md` (design
   source of truth), `docs/behavior.md` (user-facing behavior),
   `SECURITY.md`, `README.md`.
 
