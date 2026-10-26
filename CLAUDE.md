@@ -13,9 +13,10 @@ design, decisions, open items and next steps.
   No driver; run as admin: `byteleash-probe --seconds 120 --out report.txt`.
   First run's findings are in docs/ideas.md (Next steps 5).
 - `platforms/windows/enforce_test/`: `byteleash-enforce-test.exe` for plan
-  M1 (WFP block / QoS throttle against a sink on a second PC). WFP part
-  run on loopback 2026-10-26 (results in docs/ideas.md, Next steps 6); QoS
-  still needs a second PC. Run steps in platforms/windows/README.md.
+  M1 (WFP block / QoS throttle / job object rate limit against a sink on a
+  second PC). WFP part run on loopback 2026-10-26 (results in
+  docs/ideas.md, Next steps 6); QoS and job still need a second PC. Run
+  steps in platforms/windows/README.md.
 - No service, tray app or settings file yet.
 
 ## Where to pick up
@@ -23,7 +24,9 @@ v1 is for the author's own Windows 11 home PCs; milestones in docs/plan.md.
 1. **Next (plan M1, in progress):** driverless enforcement test. WFP
    answered on loopback: an app-ID block cuts existing connections at once
    (raw output in docs/test-results/2026-10-26-wfp-loopback/). Still open:
-   how low a QoS throttle goes (needs a second PC as sink), WFP over a real
+   how low a QoS or job object throttle goes (needs a second PC as sink;
+   job throttling is the most promising driverless smooth throttle), WFP
+   over a real
    adapter / Memory Integrity on, and Open item 7 (a WFP gate blocks
    downloads too; how should Leash mode use it?).
 2. **WinDivert is not used at this time** (looks unsupported; decided

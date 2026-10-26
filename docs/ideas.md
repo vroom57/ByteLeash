@@ -75,6 +75,38 @@ enforcement with a WFP gate, which also blocks downloads (item 7).
    downloads while gated acceptable? What threshold reopens the gate? Does
    QoS (if it works at low rates) replace the gate for apps given a
    higher rate?
+   - **Overshoot (raised 2026-10-26):** the gate closes only after ETW
+     reports the sends, so a fast uploader can send far more than its
+     burst first (at 1 Gbit/s, ~1 s of ETW delay is ~100 MB). The debt
+     model and daily cap punish it afterwards, but the data is already
+     out. Measure ETW's delivery delay (M1). Possible fix: a permanent QoS
+     ceiling on every leashed app (e.g. 1 Mbit/s) so the leak before the
+     gate closes stays small (~100 KB); depends on the QoS test.
+   - Summary of the driverless model: rate = average enforced by on/off
+     blocks (no smooth 30 B/s); daily cap = block until midnight (works
+     as designed).
+   - **Driverless smooth throttling, candidates (raised 2026-10-26,
+     untested):** Windows' own signed drivers can pace upload traffic,
+     controlled from user mode:
+     - **Job object network rate control**
+       (`JobObjectNetRateControlInformation`, Windows 10 1607+): max
+       outgoing bytes/s per job; the service puts an app's process in a
+       job and changes the limit at runtime (full speed during the burst,
+       the throttled rate after). Upload only, so downloads keep working.
+       Most promising. Unknowns: lowest enforced rate, UDP/QUIC, TCP
+       behavior at very low rates, svchost services, processes already in
+       a job. `job` mode added to the enforcement test 2026-10-26; run it
+       with the QoS test (second PC).
+     - **QoS policies** (already in the test): the same packet scheduler,
+       matched by exe path, slower to change.
+     - **Wintun** (WireGuard's signed virtual adapter): full per-packet
+       control via a user-mode local "VPN", but heavy (own network stack),
+       conflicts with real VPNs, risky if it crashes. Last resort.
+     - Not viable: capture drivers (Npcap: can't hold or drop), WFP
+       without a callout driver (allow/block only), system proxy settings
+       (apps ignore them).
+     If job or QoS throttling works at low rates, it becomes the main
+     enforcement and the WFP block is used for the daily cap.
 
 ### Next steps
 

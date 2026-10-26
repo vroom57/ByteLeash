@@ -36,9 +36,11 @@ Covers WFP block (app ID and per-connection), QoS throttle rates and
 clean-up. ETW reaction time is measured separately (probe / M3).
 **WFP part run 2026-10-26 on loopback:** an app-ID block cuts running
 connections instantly and is removed automatically if the process dies;
-cut connections don't resume (ideas.md, Next steps 6). Remaining: QoS
-(needs a second PC), WFP over a real adapter / Memory Integrity on, and the
-gate design question (ideas.md, Open items 7).
+cut connections don't resume (ideas.md, Next steps 6). Added the same day:
+a `job` mode (job object network rate control, a possible driverless
+smooth throttle; ideas.md, Open items 7). Remaining: QoS and job throttle
+runs (need a second PC), WFP over a real adapter / Memory Integrity on,
+ETW reaction time, and the gate design question (Open items 7).
 
 The biggest risk in v1. ETW only reports traffic after the fact; it can't
 drop a packet. So enforcement becomes a per-app gate the service opens and

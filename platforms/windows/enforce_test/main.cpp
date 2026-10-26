@@ -1,7 +1,8 @@
 // byteleash-enforce-test: tries driverless ways to enforce Leash mode
 // (docs/plan.md, M1). An upload runs from this PC to a sink on another PC
-// while a WFP block filter or a Windows QoS throttle is applied and removed;
-// the bytes the sink acknowledges show what actually got through.
+// while a WFP block filter, a Windows QoS throttle or a job object rate limit
+// is applied and removed; the bytes the sink acknowledges show what actually
+// got through.
 //
 // Usage:
 //   byteleash-enforce-test sink [--port 5201]              (on the other PC)
@@ -10,8 +11,11 @@
 //   byteleash-enforce-test qos --target IP:PORT [--rates 240,1600,8000,...]
 //       [--step 20] [--before 5] [--after 15] [--reconnect]
 //       [--store ActiveStore|localhost] [--out FILE]
+//   byteleash-enforce-test job --target IP:PORT [--rates 30,200,1000,...]
+//       [--step 20] [--before 5] [--after 15] [--reconnect] [--out FILE]
 //   byteleash-enforce-test cleanup
-// wfp, qos and cleanup need an administrator terminal.
+// qos rates are in bits/s, job rates in bytes/s.
+// wfp, qos, job and cleanup need an administrator terminal.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -33,6 +37,7 @@
 #include <vector>
 
 #include "flow.h"
+#include "job.h"
 #include "qos.h"
 #include "wfp.h"
 
@@ -47,8 +52,11 @@ constexpr char kUsage[] =
     "  byteleash-enforce-test qos --target IP:PORT [--rates 240,1600,8000,...]\n"
     "      [--step 20] [--before 5] [--after 15] [--reconnect]\n"
     "      [--store ActiveStore|localhost] [--out FILE]\n"
+    "  byteleash-enforce-test job --target IP:PORT [--rates 30,200,1000,...]\n"
+    "      [--step 20] [--before 5] [--after 15] [--reconnect] [--out FILE]\n"
     "  byteleash-enforce-test cleanup\n"
-    "wfp, qos and cleanup need an administrator terminal.\n";
+    "qos rates are in bits/s, job rates in bytes/s.\n"
+    "wfp, qos, job and cleanup need an administrator terminal.\n";
 
 constexpr int kConnectTimeoutMs = 5000;
 
@@ -79,7 +87,7 @@ struct Options {
     int before = 5;
     int block = 10;
     int after = 15;
-    std::vector<std::uint64_t> rates{240, 1600, 8000, 80000, 800000};
+    std::vector<std::uint64_t> rates;  // empty: the command's defaults
     int step = 20;
     bool reconnect = false;
     std::wstring store = L"ActiveStore";
@@ -148,7 +156,13 @@ bool parseOptions(int argc, wchar_t** argv, Options& opt) {
         return opt.has_target && (opt.mode == L"app" || opt.mode == L"connection") &&
                opt.before >= 0 && opt.block > 0 && opt.after >= 0;
     }
-    if (opt.command == L"qos") {
+    if (opt.command == L"qos" || opt.command == L"job") {
+        if (opt.rates.empty()) {
+            // Both start at 30 B/s, the default throttled rate.
+            opt.rates = opt.command == L"qos"
+                            ? std::vector<std::uint64_t>{240, 1600, 8000, 80000, 800000}
+                            : std::vector<std::uint64_t>{30, 200, 1000, 10000, 100000};
+        }
         return opt.has_target && opt.step > 0 && opt.before >= 0 && opt.after >= 0 &&
                (opt.store == L"ActiveStore" || opt.store == L"localhost");
     }
@@ -439,33 +453,34 @@ int runWfp(const Options& opt) {
     return 0;
 }
 
-int runQos(const Options& opt) {
+// A rate limit stepped through opt.rates by runThrottleSteps.
+struct Throttle {
+    std::string description;  // for the report header
+    std::string unit;         // unit of opt.rates
+    double bytes_per_unit = 1;
+    std::function<std::string(std::uint64_t)> apply;  // returns a note
+    std::function<std::string()> remove;              // returns a note
+};
+
+int runThrottleSteps(const Options& opt, const Throttle& throttle) {
     Report report;
     writeHeader(report, opt);
-    report.line(std::format("QoS policy store {}; {}", narrow(opt.store),
+    report.line(std::format("{}; {}", throttle.description,
                             opt.reconnect ? "a new connection for each rate"
                                           : "one connection throughout"));
-    removeQosThrottle(opt.store);
     UploadFlow flow;
     if (const int err = flow.open(opt.target, kConnectTimeoutMs); err != 0) {
         report.line(std::format("Connecting to the sink failed: Winsock error {}", err));
         return 1;
     }
-    const std::wstring exe = exePath();
     std::vector<Phase> phases;
-    phases.push_back({"before: no policy", opt.before, {}});
+    phases.push_back({"before: no limit", opt.before, {}});
     for (const std::uint64_t rate : opt.rates) {
         const std::string name =
-            std::format("throttle {} bit/s (expect {:.1f} B/s)", rate,
-                        static_cast<double>(rate) / 8);
+            std::format("limit {} {} (expect {:.1f} B/s)", rate, throttle.unit,
+                        static_cast<double>(rate) * throttle.bytes_per_unit);
         phases.push_back({name, opt.step, [&, rate] {
-            removeQosThrottle(opt.store);
-            const auto start = std::chrono::steady_clock::now();
-            const int code = addQosThrottle(exe, rate, opt.store);
-            std::string note =
-                code == 0 ? std::format("policy added in {:.0f} ms",
-                                        secondsSince(start) * 1000)
-                          : std::format("New-NetQosPolicy failed (exit code {})", code);
+            std::string note = throttle.apply(rate);
             if (opt.reconnect || !flow.sample().ok) {
                 const int result = flow.open(opt.target, kConnectTimeoutMs);
                 note += result == 0
@@ -475,15 +490,61 @@ int runQos(const Options& opt) {
             return note;
         }});
     }
-    phases.push_back({"after: policy removed", opt.after, [&] {
-        return removeQosThrottle(opt.store) >= 0 ? std::string("policy removed")
-                                                 : std::string("removing the policy failed");
-    }});
+    phases.push_back({"after: limit removed", opt.after, throttle.remove});
     runPhases(flow, opt.target, phases, report);
-    removeQosThrottle(opt.store);  // covers Ctrl+C mid-run
     flow.close();
     report.save(opt.out);
     return 0;
+}
+
+int runQos(const Options& opt) {
+    removeQosThrottle(opt.store);
+    const std::wstring exe = exePath();
+    const Throttle throttle{
+        std::format("QoS policy store {}", narrow(opt.store)),
+        "bit/s",
+        1.0 / 8,
+        [&](std::uint64_t rate) {
+            removeQosThrottle(opt.store);
+            const auto start = std::chrono::steady_clock::now();
+            const int code = addQosThrottle(exe, rate, opt.store);
+            return code == 0
+                       ? std::format("policy added in {:.0f} ms", secondsSince(start) * 1000)
+                       : std::format("New-NetQosPolicy failed (exit code {})", code);
+        },
+        [&] {
+            return removeQosThrottle(opt.store) >= 0
+                       ? std::string("policy removed")
+                       : std::string("removing the policy failed");
+        }};
+    const int result = runThrottleSteps(opt, throttle);
+    removeQosThrottle(opt.store);  // covers Ctrl+C mid-run
+    return result;
+}
+
+int runJob(const Options& opt) {
+    JobThrottle job;
+    if (const unsigned long err = job.open(); err != 0) {
+        say(std::format("Putting this process in a job object failed: error {}\n", err));
+        return 1;
+    }
+    const Throttle throttle{
+        "Job object network rate control (this process)",
+        "B/s",
+        1.0,
+        [&](std::uint64_t rate) {
+            const unsigned long result = job.setLimit(rate);
+            return result == 0 ? std::string("job limit set")
+                               : std::format("setting the job limit failed: error {}",
+                                             result);
+        },
+        [&] {
+            const unsigned long result = job.clearLimit();
+            return result == 0 ? std::string("job limit removed")
+                               : std::format("removing the job limit failed: error {}",
+                                             result);
+        }};
+    return runThrottleSteps(opt, throttle);  // the limit ends with the process
 }
 
 int runCleanup() {
@@ -512,7 +573,8 @@ int run(int argc, wchar_t** argv) {
         return 2;
     }
     if (opt.command != L"sink" && !isElevated()) {
-        std::fputs("wfp, qos and cleanup need an administrator terminal.\n", stderr);
+        std::fputs("wfp, qos, job and cleanup need an administrator terminal.\n",
+                   stderr);
         return 1;
     }
     WSADATA wsa{};
@@ -529,6 +591,8 @@ int run(int argc, wchar_t** argv) {
         result = runWfp(opt);
     } else if (opt.command == L"qos") {
         result = runQos(opt);
+    } else if (opt.command == L"job") {
+        result = runJob(opt);
     } else {
         result = runCleanup();
     }

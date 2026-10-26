@@ -48,6 +48,8 @@ byteleash-enforce-test wfp --target <sink IP>:5201 --mode app --out wfp-app.txt
 byteleash-enforce-test wfp --target <sink IP>:5201 --mode connection --out wfp-conn.txt
 byteleash-enforce-test qos --target <sink IP>:5201 --out qos.txt
 byteleash-enforce-test qos --target <sink IP>:5201 --reconnect --out qos-new.txt
+byteleash-enforce-test job --target <sink IP>:5201 --out job.txt
+byteleash-enforce-test job --target <sink IP>:5201 --reconnect --out job-new.txt
 byteleash-enforce-test cleanup
 ```
 
@@ -58,6 +60,10 @@ byteleash-enforce-test cleanup
 - `qos` steps through throttle rates in bits/s (default
   `240,1600,8000,80000,800000`; 240 bit/s = 30 B/s), using a non-persistent
   policy (`--store ActiveStore`; `localhost` is persistent).
+- `job` puts the test process in a job object and steps through job
+  network rate limits in **bytes/s** (default `30,200,1000,10000,100000`),
+  using `JobObjectNetRateControlInformation`. The limit can be changed at
+  runtime and ends with the process, so there's nothing to clean up.
 - Clean-up check: during a long `wfp --block 120` run, kill it from another
   admin terminal (`taskkill /f /im byteleash-enforce-test.exe`), then run
   `cleanup`. WFP filters should be gone already (dynamic session); a killed

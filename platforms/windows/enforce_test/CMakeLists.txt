@@ -2,6 +2,7 @@
 add_executable(byteleash-enforce-test
     main.cpp
     flow.cpp
+    job.cpp
     qos.cpp
     wfp.cpp
 )
