@@ -3,13 +3,19 @@
 > Working document. Rough notes are fine here; once ideas firm up they can move
 > into a proper project description or design docs.
 
-## Current status (updated 2026-10-21)
+## Current status (updated 2026-10-26)
+
+v1 milestones and their order are in [plan.md](plan.md). v1 is for the
+author's own Windows 11 home PCs.
 
 Design review complete (see Design Q&A below). Core throttling engine
 written and unit-tested. Windows: a watch-only ETW probe works without a
-driver (Next steps 5). Next: driverless enforcement test (Next steps 6).
-Open for discussion: LAN exemption details (item 5) and WinDivert as the
-shipping dependency (item 6).
+driver (Next steps 5). Driverless enforcement test (Next steps 6) in
+progress: the WFP part ran on loopback and works (an app-ID block cuts
+running connections instantly and disappears if the process dies); QoS
+still needs a second PC. WinDivert is not used for now (item 6, decided
+2026-10-26). Open for discussion: LAN exemption details (item 5) and
+enforcement with a WFP gate, which also blocks downloads (item 7).
 
 ### Open items
 
@@ -39,7 +45,12 @@ shipping dependency (item 6).
      charged) or hidden entirely?
    - **User-defined local ranges** (e.g. a second subnet or a routed home
      lab): needed in v1?
-6. **WinDivert as the shipping dependency: discuss.** From the maintainer
+6. ~~WinDivert as the shipping dependency~~ **Decided 2026-10-26:** not
+   using WinDivert at this time, because it looks unsupported. ByteLeash
+   goes driverless: ETW for watching, and Windows' own mechanisms (WFP
+   user-mode filters, QoS policies) for enforcement, pending Next steps 6.
+   Revisit only if the driverless path can't enforce Leash mode. Background:
+   from the maintainer
    (basil00/WinDivert issue #395, 2025-09): 2.2.2 is the long-term version;
    he's "not very active"; even security fixes "would be difficult, due to
    the driver signing process", which depends on finding third parties to
@@ -50,6 +61,20 @@ shipping dependency (item 6).
    per-app traffic stats) for learning mode, Windows QoS policies for
    enforcement, or ByteLeash's own WFP driver (needs EV cert + Microsoft
    attestation).
+
+7. **Leash enforcement with a WFP gate: discuss.** (From the 2026-10-26
+   WFP test, Next steps 6.) A driverless block is all-or-nothing per app:
+   it cuts the app's connections and blocks **downloads too** while it's
+   on, unlike the "downloads unrestricted" rule. A full-refill gate (64 KB
+   at 30 B/s ≈ 36 min) would take an app fully offline for half an hour
+   after each burst. Possible shape: "debt" gating. The bucket may go
+   negative (ETW reports sends after the fact), and the block lasts only
+   until the bucket is back above zero or a small threshold. At 30 B/s
+   that's tens of seconds per KB, so the app gets short windows to
+   reconnect and send a little: a coarse trickle. Questions: is losing
+   downloads while gated acceptable? What threshold reopens the gate? Does
+   QoS (if it works at low rates) replace the gate for apps given a
+   higher rate?
 
 ### Next steps
 
@@ -64,7 +89,9 @@ shipping dependency (item 6).
    Since added: Learning/Leash modes with dry-run counters, and a
    provisional LAN address classifier (see Open items 5). Not yet in core:
    settings file, "known apps" list for new-app notifications.
-4. WinDivert prototype: log upload packets with owning app and destination,
+4. **Shelved 2026-10-26** (WinDivert not used, see Open items 6; the ETW
+   probe in step 5 covered the watching part). WinDivert prototype: log
+   upload packets with owning app and destination,
    to validate the provisional app-identity rule against real traffic. Also
    check packet sizes: with large send offload, Windows may hand WinDivert
    segments up to 64 KB, and a packet bigger than an app's burst can never
@@ -122,8 +149,31 @@ shipping dependency (item 6).
    - Lowest rate a Windows QoS throttle policy
      (`New-NetQosPolicy -AppPathNameMatchCondition
      -ThrottleRateActionBitsPerSecond`) accepts and actually enforces.
-   - Outcome decides Open items 6: driverless Leash mode, or WinDivert for
-     enforcement only.
+   - Outcome decides how Leash mode is enforced without a driver (WinDivert
+     is out for now, see Open items 6).
+   - **WFP results 2026-10-26** (`byteleash-enforce-test`, loopback to a sink
+     on the same PC, Windows build 26200, Memory Integrity off; raw output
+     in `docs/test-results/2026-10-26-wfp-loopback/`):
+     - **App-ID block at the ALE connect layers cuts running connections
+       at once.** Filter added in under 1 ms; a 100+ MB/s upload stopped
+       before the next 100 ms sample, and the connection was gone (Windows
+       re-authorizes existing connections when a filter is added). New
+       connections fail immediately (Winsock 10013, access denied).
+     - **Cut connections don't come back.** After the filter is removed
+       (10 s or 60 s later), the old connection stays dead; new connections
+       work at once. Apps have to reconnect.
+     - **Per-connection block at the transport layer** also stops data at
+       once, but the connection lingers (TCP retransmits), doesn't resume
+       after the filter is removed, and was reset ~9 s later. No advantage
+       over the app block; not worth pursuing.
+     - **Fail-safe confirmed:** with a dynamic WFP session, killing the
+       process (`taskkill /f`) removed its filters (2 present during the
+       run, 0 after); nothing to clean up.
+     - **Still to test:** QoS throttles (need a sink on a second PC, since
+       QoS ignores loopback); the same WFP runs over a real network
+       adapter and with Memory Integrity on; ETW reaction time (how much an
+       app sends before the block lands).
+     - Consequence: see Open items 7.
 
 ## What is ByteLeash?
 
@@ -151,6 +201,11 @@ that works the way I want it to work.
 
 Home users, maybe small businesses, but no central administration is planned.
 It should be free and lightweight.
+
+**v1 audience (decided 2026-10-26):** the author's own home PCs, running
+Windows 11. A public release for general home users comes later and adds its
+own work (onboarding, code signing, antivirus reputation, support). v1 still
+follows the design here, but doesn't need to polish for strangers.
 
 ## Core features
 
@@ -205,8 +260,9 @@ Two parts:
 - Service launches at startup, preferably before the network is used
 - Tray icon that can be opened to see the app
 - Optimized for minimal resources, no bloatware
-- Packet interception options:
-  - **WinDivert** (leading candidate): third-party, already-signed driver;
+- Packet interception options (**decided 2026-10-26:** driverless; ETW to
+  watch, WFP user-mode filters / QoS policies to enforce; see Open items 6):
+  - **WinDivert** (not used at this time; looks unsupported): third-party, already-signed driver;
     can intercept packets, identify the owning process, and delay them for
     throttling. Ships with the app; no separate install for the user.
     Dual-licensed LGPLv3 / GPLv2.
@@ -315,7 +371,9 @@ Two parts:
   viewed. In learning mode new apps just appear in the list. (Revised
   2026-10-21; previously new apps were throttled silently with toasts off.)
 - Distribution is one folder with four runtime files (docs/readmes not
-  counted; goal is a tiny, unbloated directory):
+  counted; goal is a tiny, unbloated directory). **Update 2026-10-26:** with
+  WinDivert out, the two WinDivert files below drop, leaving two runtime
+  files (`ByteLeash.exe`, `ByteLeash.json`):
   - `ByteLeash.exe`: one exe, two modes. Runs as the service when started by
     the Service Control Manager, as the tray app when launched by the user. On
     first run it installs itself as a service (one UAC prompt); no separate

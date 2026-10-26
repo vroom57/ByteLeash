@@ -1,0 +1,46 @@
+byteleash-enforce-test wfp, 2026-10-26 15:31
+Windows build 26200.9168, Memory Integrity off
+Sink 127.0.0.1:5201
+Mode connection: block this one connection at the outbound transport layer (5-tuple)
+--- before: no filter (5 s)
+      1.1 s  +125190144 B  acked   125190144 B  retransmitted         0 B  timeouts 0
+      2.1 s  +122502144 B  acked   247692288 B  retransmitted         0 B  timeouts 0
+      3.1 s  +135242752 B  acked   382935040 B  retransmitted         0 B  timeouts 0
+      4.1 s  +128392192 B  acked   511327232 B  retransmitted         0 B  timeouts 0
+      5.1 s  +134528000 B  acked   645855232 B  retransmitted         0 B  timeouts 0
+    total 645855232 B acked, 126860717 B/s average; first progress at 0.1 s, last progress at 5.1 s
+    new connection: allowed
+--- blocked (10 s)
+    block filter added in 0.5 ms
+      1.1 s  +        0 B  acked           0 B  retransmitted     18432 B  timeouts 1
+      2.0 s  +        0 B  acked           0 B  retransmitted     18432 B  timeouts 1
+      3.0 s  +        0 B  acked           0 B  retransmitted     35840 B  timeouts 1
+      4.1 s  +        0 B  acked           0 B  retransmitted     35840 B  timeouts 1
+      5.1 s  +        0 B  acked           0 B  retransmitted     53248 B  timeouts 1
+      6.0 s  +        0 B  acked           0 B  retransmitted     53248 B  timeouts 1
+      7.0 s  +        0 B  acked           0 B  retransmitted     53248 B  timeouts 1
+      8.1 s  +        0 B  acked           0 B  retransmitted     53248 B  timeouts 1
+      9.1 s  +        0 B  acked           0 B  retransmitted     53248 B  timeouts 1
+     10.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+    total 0 B acked, 0 B/s average; first progress none, last progress none
+    new connection: allowed
+--- unblocked: filter removed (15 s)
+    filter removed
+      1.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      2.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      3.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      4.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      5.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      6.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      7.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      8.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+      8.9 s  upload connection lost (send error 10054)
+      9.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+     10.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+     11.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+     12.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+     13.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+     14.1 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+     15.0 s  +        0 B  acked           0 B  retransmitted     70656 B  timeouts 1
+    total 0 B acked, 0 B/s average; first progress none, last progress none
+    new connection: allowed

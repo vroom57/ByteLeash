@@ -1,0 +1,47 @@
+byteleash-enforce-test wfp, 2026-10-26 15:31
+Windows build 26200.9168, Memory Integrity off
+Sink 127.0.0.1:5201
+Mode app: block this app at the ALE connect layers (app ID)
+--- before: no filter (5 s)
+      1.1 s  + 60785664 B  acked    60785664 B  retransmitted      2048 B  timeouts 2
+      2.1 s  + 91490304 B  acked   152275968 B  retransmitted      3072 B  timeouts 3
+      3.1 s  + 89648128 B  acked   241924096 B  retransmitted      4096 B  timeouts 4
+      4.1 s  + 89967616 B  acked   331891712 B  retransmitted      5120 B  timeouts 5
+      5.1 s  +116008960 B  acked   447900672 B  retransmitted      5120 B  timeouts 5
+    total 447900672 B acked, 88070545 B/s average; first progress at 0.1 s, last progress at 5.1 s
+    new connection: allowed
+--- blocked (10 s)
+    block filter added in 0.6 ms
+    no upload connection at phase start
+      1.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      2.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      3.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      4.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      5.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      6.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      7.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      8.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      9.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     10.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+    total 0 B acked, 0 B/s average; first progress none, last progress none
+    new connection: failed, Winsock error 10013
+--- unblocked: filter removed (15 s)
+    filter removed
+    no upload connection at phase start
+      1.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      2.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      3.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      4.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      5.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      6.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      7.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      8.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+      9.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     10.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     11.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     12.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     13.0 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     14.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+     15.1 s  +        0 B  acked           0 B  retransmitted      5120 B  timeouts 5
+    total 0 B acked, 0 B/s average; first progress none, last progress none
+    new connection: allowed
