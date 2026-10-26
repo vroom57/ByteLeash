@@ -33,8 +33,8 @@ Technical notes and open questions: ideas.md, "SRUM viewer".
 - Console tool that prints / exports per-app bytes sent and received per
   hour (CSV), in `platforms/windows/`.
 
-**Done when:** the tool's per-app totals on this PC agree with Settings →
-Data usage (combined) and with NetworkUsageView (sent / received).
+**Done when:** the tool's per-app totals on this PC (sent + received)
+agree with Settings → Data usage.
 
 ### V2: Viewer window
 
